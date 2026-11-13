@@ -1,6 +1,7 @@
 # IDEs e editores
 .idea/
 .vscode/
+.ai/
 
 # Python
 __pycache__/
