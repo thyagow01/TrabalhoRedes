@@ -97,3 +97,97 @@ class PeerTable:
 
         return desconectar_imd
 
+    def get_peers(self):
+        cand = []
+        agora = time.monotonic()
+        with self.lock:
+            for peer_id, reg in self.peers.items():
+                if reg["status"] == Discovered or reg["status"] == Stale:
+                    if agora >= reg["prox_tentativa"]:
+                        cand.append((peer_id, reg["ip"], reg["porta"]))
+        return cand
+
+    def conectando(self, peer_id):
+        with self.lock:
+            if peer_id in self.peers:
+                self.peers[peer_id]["status"] = Connecting
+                log.debug(f"[PeerTable] {peer_id} -> CONNECTING")
+
+        return
+
+    def conectado(self, peer_id, direcao, features=None):
+        with self.lock:
+            if peer_id in self.peers:
+                reg = self.peers[peer_id]
+                reg["status"] = Connected
+                reg["direcao"] = direcao
+                if features:
+                    reg["features"] = features
+                else:
+                    reg["features"] = []
+                reg["tentativas"] = 0
+                reg["prox_tentativa"] = 0.0
+                reg["last_error"] = None
+                log.info(f"[PeerTable] {peer_id} CONECTADO ({direcao})")
+        return
+
+    def falha(self, peer_id, erro):
+        with self.lock:
+            if peer_id in self.peers:
+                reg = self.peers[peer_id]
+                reg["tentativas"] += 1
+                reg["last_error"] = str(erro)
+                if reg["tentativas"] >= self.max_tries:
+                    reg["status"]= Gone
+                    log.warning(f"[PeerTable] {peer_id} excedeu limite de tentativas -> GONE")
+                else:
+                    reg["status"] = Stale
+                    espera = min(self.max_backoff, self.base_backoff * (2 ** (reg["tentativas"] - 1)))
+                    reg["prox_tentativa"] = time.monotonic() + espera
+                    log.debug(f"[PeerTable] {peer_id} vai esperar {espera} segundos para tentar novamente -> STALE")
+        return
+
+    def desconectou(self, peer_id, motivo):
+        with self.lock:
+            if peer_id in self.peers:
+                reg = self.peers[peer_id]
+                if reg["status"] == Connected:
+                    reg["status"] = Stale
+                    reg["direcao"] = None
+                    reg["last_error"] = str(motivo)
+                    reg["prox_tentativa"] = time.monotonic()+self.base_backoff
+                    log.info(f"[PeerTable] Conexão com {peer_id} perdida ({motivo}) -> STALE")
+        return
+
+    def calc_rtt(self, peer_id, rtt_ms):
+        with self.lock:
+            if peer_id in self.peers:
+                reg = self.peers[peer_id]
+                reg["rtts"].append(rtt_ms)
+                reg["avg_rtt"] = sum(reg["rtts"]) / len(reg["rtts"])
+                log.debug(f"[PeerTable] RTT {peer_id}: {rtt_ms:.1f}ms (média: {reg['avg_rtt']:.1f}ms)")
+
+        return
+
+    def obter_peer(self, peer_id):
+        with self.lock:
+            if peer_id in self.peers:
+                return dict(self.peers[peer_id])
+            return None
+
+    def list_conect(self):
+        conectados = []
+        with self.lock:
+            for peer_id, reg in self.peers.items():
+                if reg["status"] == Connected:
+                    conectados.append(peer_id)
+        return conectados
+
+    def resumo(self):
+        with self.lock:
+            contagem = {Discovered: 0, Connecting: 0, Connected: 0, Stale: 0, Gone: 0}
+            for reg in self.peers.values():
+                stat = reg["status"]
+                if stat in contagem:
+                    contagem[stat] += 1
+            return contagem
