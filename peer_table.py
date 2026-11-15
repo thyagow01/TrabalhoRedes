@@ -117,18 +117,17 @@ class PeerTable:
 
     def conectado(self, peer_id, direcao, features=None):
         with self.lock:
-            if peer_id in self.peers:
-                reg = self.peers[peer_id]
-                reg["status"] = Connected
-                reg["direcao"] = direcao
-                if features:
-                    reg["features"] = features
-                else:
-                    reg["features"] = []
-                reg["tentativas"] = 0
-                reg["prox_tentativa"] = 0.0
-                reg["last_error"] = None
-                log.info(f"[PeerTable] {peer_id} CONECTADO ({direcao})")
+            if peer_id not in self.peers:
+                name, namespace = peer_id.split("@",1)
+                self.peers[peer_id] = self.criar_registro(peer_id,name,namespace, ip="0.0.0.0", porta=0)
+            reg = self.peers[peer_id]
+            reg["status"] = Connected
+            reg["direcao"] = direcao
+            reg["features"]=features if features else []
+            reg["tentativas"] = 0
+            reg["prox_tentativa"] = 0.0
+            reg["last_error"] = None
+            log.info(f"[PeerTable] {peer_id} conectado {direcao}")
         return
 
     def falha(self, peer_id, erro):
