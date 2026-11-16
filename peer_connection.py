@@ -17,8 +17,8 @@ def env_msg(sock, dado):
     return
 
 def hello(meu_peer_id, features=None):
-    if features == None:
-        features = []
+    if features is None:
+        features = ["hangman"]
     return {
         "type": "HELLO",
         "msg_id": str(uuid.uuid4()),
@@ -29,8 +29,8 @@ def hello(meu_peer_id, features=None):
     }
 
 def hello_ok(meu_peer_id, features=None):
-    if features == None:
-        features = []
+    if features is None:
+        features = ["hangman"]
     return {
             "type": "HELLO_OK",
             "msg_id": str(uuid.uuid4()),
@@ -59,11 +59,12 @@ def bye_ok(meu_peer_id, dest):
     }
 
 class ger_conex:
-    def __init__(self, meu_peer_id, peer_table, porta, on_mensagem=None):
+    def __init__(self, meu_peer_id, peer_table, porta, on_mensagem=None, on_desconexao=None):
         self.meu_peer_id = meu_peer_id
         self.peer_table = peer_table
         self.porta = int(porta)
         self.on_mensagem = on_mensagem
+        self.on_desconexao = on_desconexao
 
         self.conexoes ={}
         self.lock = threading.RLock()
@@ -106,6 +107,7 @@ class ger_conex:
             if not msg:
                 cliente_sock.close()
                 return
+            log.debug(f"<- {json.dumps(msg)}")
 
             if msg.get("type") != "HELLO":
                 log.warning(f"[Handshake IN] Esperava HELLO de {endereco}, mas veio {msg.get("type")}")
@@ -158,6 +160,7 @@ class ger_conex:
                     if msg is None:
                         log.info(f"[Conexao] {peer_id} fechou a conexao")
                         break
+                    log.debug(f"<- {json.dumps(msg)}")
                     if msg.get("type") == "BYE":
                         log.info(f"[Conexao] {peer_id} enviou BYE (motivo: {msg.get('reason')})")
                         try:
@@ -182,15 +185,25 @@ class ger_conex:
 
         finally:
             with self.lock:
-                self.conexoes.pop(peer_id, None)
+                if self.conexoes.get(peer_id) == sock:
+                    self.conexoes.pop(peer_id, None)
+                    era_ativa = True
+                else:
+                    era_ativa = False
 
             try:
                 sock.close()
             except:
                 pass
 
-            self.peer_table.desconectou(peer_id, motivo="Conexao encerrada")
-            log.info(f"[Conexao] Desconectado com {peer_id}")
+            if era_ativa:
+                self.peer_table.desconectou(peer_id, motivo="Conexao encerrada")
+                log.info(f"[Conexao] Desconectado com {peer_id}")
+                if self.on_desconexao:
+                    try:
+                        self.on_desconexao(peer_id)
+                    except Exception as e:
+                        log.error(f"[Conexao] Erro no callback on_desconexao: {e}")
         return
 
     def conect(self, peer_id, ip, porta):
@@ -207,6 +220,7 @@ class ger_conex:
             resp = jh.ler_linha_socket(arquivo)
             if not resp or resp.get("type") != "HELLO_OK":
                 raise Exception(f"Esperava HELLO_OK, mas veio {resp.get('type') if resp else 'nada'}")
+            log.debug(f"<- {json.dumps(resp)}")
 
             sock.settimeout(None)
 
@@ -220,10 +234,16 @@ class ger_conex:
             leitura.start()
 
         except Exception as e:
-            log.warning(f"[Conexao] Falha ao conectar em {peer_id} ({ip}:{porta}): {e}")
+            info = self.peer_table.obter_peer(peer_id)
+            tentativa = (info.get("tentativas", 0) + 1) if info else 1
+            if tentativa <= 1:
+                log.warning(f"[Conexao] Falha ao conectar em {peer_id} ({ip}:{porta}): {e}")
+            else:
+                log.debug(f"[Conexao] Retentativa falhou em {peer_id} ({ip}:{porta}): {e}")
             self.peer_table.falha(peer_id, str(e))
             try:
-                sock.close()
+                if sock:
+                    sock.close()
             except:
                 pass
 
@@ -268,6 +288,11 @@ class ger_conex:
                 pass
             self.peer_table.desconectou(peer_id, motivo=motivo)
             log.info(f"[Conexao] Desconectou de {peer_id}")
+            if self.on_desconexao:
+                try:
+                    self.on_desconexao(peer_id)
+                except Exception as e:
+                    log.error(f"[Conexao] Erro no callback on_desconexao: {e}")
 
         return
 

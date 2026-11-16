@@ -38,6 +38,7 @@ class PeerTable:
             "expiracao": expiracao,
             "rtts": deque(maxlen=10), #guarda os ultimos 10 rtt pra media
             "avg_rtt":None, #media do rtt
+            "motivo_gone": None,
         }
 
     def update_discover(self, lista_peers):
@@ -80,18 +81,27 @@ class PeerTable:
                     reg["porta"] = int(porta)
                     reg["expiracao"] = expiracao
 
-                    if reg["status"] == Gone or (reg["status"] == Stale and (mudou_end or reregistro)):
+                    if reg["status"] == Gone:
+                        if mudou_end or reg.get("motivo_gone") == "ausente_rdv":
+                            reg["status"] = Discovered
+                            reg["tentativas"] = 0
+                            reg["prox_tentativa"] = 0.0
+                            reg["last_error"] = None
+                            reg["motivo_gone"] = None
+                            log.debug(f"[PeerTable] Peer reapareceu no RDV: {peer_id} -> Discovered")
+                    elif reg["status"] == Stale and mudou_end:
                         reg["status"] = Discovered
-                        reg["tentativas"] =0
-                        reg["prox_tentativa"] =0.0
+                        reg["tentativas"] = 0
+                        reg["prox_tentativa"] = 0.0
                         reg["last_error"] = None
-                        log.debug(f"[PeerTable] Peer reaperono RDV: {peer_id} Discovered")
+                        log.debug(f"[PeerTable] Peer mudou endereço no RDV: {peer_id} -> Discovered")
 
             for peer_id, reg in self.peers.items():
                 if peer_id not in peers_agora and reg["status"] != Gone:
                     if reg["status"] == Connected:
                         desconectar_imd.append(peer_id)
                     reg["status"] = Gone
+                    reg["motivo_gone"] = "ausente_rdv"
                     reg["direcao"] = None
                     log.info(f"[PeerTable] {peer_id} ausente no Rendezvous -> marcado como Gone")
 
@@ -102,10 +112,23 @@ class PeerTable:
         agora = time.monotonic()
         with self.lock:
             for peer_id, reg in self.peers.items():
-                if reg["status"] == Discovered or reg["status"] == Stale:
+                if reg["status"] in (Discovered, Stale):
                     if agora >= reg["prox_tentativa"]:
                         cand.append((peer_id, reg["ip"], reg["porta"]))
+                        reg["status"] = Connecting
+                        reg["prox_tentativa"] = agora + 15.0
         return cand
+
+    def resetar_tentativas(self):
+        with self.lock:
+            for reg in self.peers.values():
+                if reg["status"] in (Stale, Gone):
+                    reg["status"] = Discovered
+                    reg["tentativas"] = 0
+                    reg["prox_tentativa"] = 0.0
+                    reg["last_error"] = None
+                    reg["motivo_gone"] = None
+            log.info("[PeerTable] Tentativas de reconexão resetadas")
 
     def conectando(self, peer_id):
         with self.lock:
@@ -137,8 +160,9 @@ class PeerTable:
                 reg["tentativas"] += 1
                 reg["last_error"] = str(erro)
                 if reg["tentativas"] >= self.max_tries:
-                    reg["status"]= Gone
-                    log.warning(f"[PeerTable] {peer_id} excedeu limite de tentativas -> GONE")
+                    reg["status"] = Gone
+                    reg["motivo_gone"] = "max_tries"
+                    log.warning(f"[PeerTable] {peer_id} excedeu limite de tentativas ({self.max_tries}) -> GONE (não tentará mais)")
                 else:
                     reg["status"] = Stale
                     espera = min(self.max_backoff, self.base_backoff * (2 ** (reg["tentativas"] - 1)))

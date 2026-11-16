@@ -10,6 +10,7 @@ class RendezvousConnection:
         self.host = host
         self.port = port
         self.timeout = timeout
+        self._ultimo_registro = None
 
     def request(self, payload):
         mensagem = json.dumps(payload) + "\n" #converte para json
@@ -51,10 +52,18 @@ class RendezvousConnection:
             "ttl": int(ttl),
         }
         resposta = self.request(payload)
-        log.info(
-            "[RDV] registered %s@%s as %s:%s (ttl=%s)",
-            name, namespace, resposta.get("ip"), resposta.get("port"), resposta.get("ttl")
-        )
+        chave_reg = (name, namespace, resposta.get("ip"), int(resposta.get("port", port)))
+        if self._ultimo_registro != chave_reg:
+            self._ultimo_registro = chave_reg
+            log.info(
+                "[RDV] registered %s@%s as %s:%s (ttl=%s)",
+                name, namespace, resposta.get("ip"), resposta.get("port"), resposta.get("ttl")
+            )
+        else:
+            log.debug(
+                "[RDV] renewed %s@%s as %s:%s (ttl=%s)",
+                name, namespace, resposta.get("ip"), resposta.get("port"), resposta.get("ttl")
+            )
         return resposta
 
     def discover(self, namespace = None):
