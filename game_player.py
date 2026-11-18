@@ -297,6 +297,8 @@ class GamePlayer:
                     res = "ACERTOU!" if self.last_guess.get("correct") else "errou."
                     print(f"[Game] {jogador} arriscou palavra '{self.last_guess['word']}' → {res}")
 
+            forca = _desenhar_forca(self.vidas_restantes, self.vidas_iniciais)
+            print(forca)
             print(f"[Game] Palavra: {' '.join(self.masked)}  |  Vidas: {self.vidas_restantes}/{self.vidas_iniciais}  |  Vez de: {self.turn}{sua_vez}")
 
     def _on_guess_result(self, peer_id, msg):

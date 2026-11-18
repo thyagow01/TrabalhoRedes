@@ -64,12 +64,9 @@ class p2pno:
 
     def on_desconexao(self, peer_id):
         if hasattr(self, "player") and self.player:
-            self.host.on_peer_desconectado(peer_id)
-            return
-        if hasattr(self, "host") and self.host:
             self.player.on_peer_desconectado(peer_id)
-            return
-
+        if hasattr(self, "host") and self.host:
+            self.host.on_peer_desconectado(peer_id)
         log.debug(f"[Node] Erro na desconexão: {peer_id}")
         return
 
@@ -87,12 +84,16 @@ class p2pno:
         try:
             resp = self.rdv.register(self.namespace, self.nome, self.porta, ttl=self.ttl)
             if resp:
-                meu_ip = resp.get("meu_ip")
+                meu_ip = resp.get("ip") if resp else None
             else:
                 meu_ip = None
             peers = self.rdv.discover(self.namespace)
             desc = self.tabela.update_discover(peers)
-            for peer_id, ip, porta in desc:
+            for peer_id in desc:
+                self.geren.desconectar(peer_id, motivo="Removido do RDV")
+
+            cand = self.tabela.get_peers()
+            for peer_id, ip, porta in cand:
                 t =threading.Thread(target=self.geren.conect, args=(peer_id, ip, porta), daemon=True)
                 t.start()
 
@@ -155,14 +156,14 @@ if __name__ == "__main__":
         namespace = sys.argv[2]
         porta = int(sys.argv[3])
     else:
-        nome_def = cfg.get("nome")
+        nome_def = cfg.get("name")
         ns_def = cfg.get("namespace")
-        porta_def = cfg.get("porta")
+        porta_def = cfg.get("listen_port")
 
         nome = input(f"Nome[{nome_def}]: ").strip() or nome_def
         namespace = input(f"Namespace[{ns_def}]: ").strip() or ns_def
-        porta = str(input(f"Porta[{porta_def}]: ").strip or porta_def)
-        porta = int(porta)
+        porta = str(input(f"Porta[{porta_def}]: ").strip())
+        porta = int(porta) if porta else porta_def
 
     no = p2pno(nome,namespace,porta,config=cfg)
     no.init()
@@ -186,9 +187,10 @@ if __name__ == "__main__":
                 conectados = no.tabela.list_conect()
                 print(f"[CLI] conexoes ativas {len(conectados)} :")
                 for p in conectados:
-                    info = no.tabela.list_conect()
+                    info = no.tabela.obter_peer(p)
+                    if not info: continue
                     rtt = f"{info['avg_rtt']:.1f}ms" if info.get("avg_rtt") is not None else "medindo"
-                    print(f"{p} ({info['ip']}:{info['port']}) [{info['direcao']} Ping: {rtt}")
+                    print(f"{p} ({info['ip']}:{info.get('porta')}) [{info.get('direcao')} Ping: {rtt}")
                 print()
 
             elif cmd == "/rtt":
@@ -238,7 +240,7 @@ if __name__ == "__main__":
                 except Exception as e:
                     print(f"Erro ao listar jogos: {e}")
 
-            elif cmd == "join":
+            elif cmd == "/join":
                 if len(partes) >1:
                     try:
                         no.player.entrar_jogo(partes[1])
@@ -258,7 +260,7 @@ if __name__ == "__main__":
             elif cmd == "/guess":
                 if len(partes) >1:
                     try:
-                        no.player.enviar_palpite_palavra(partes[1])
+                        no.player.enviar_palpite_letra(partes[1])
                     except Exception as e:
                         print(f"Erro ao enviar palpite(letra): {e}")
                 else:

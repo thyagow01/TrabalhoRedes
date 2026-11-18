@@ -3,8 +3,6 @@ import threading
 import logging
 import json
 import uuid
-import time
-from turtledemo.tree import tree
 
 import json_handler as jh
 

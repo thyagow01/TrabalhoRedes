@@ -2,15 +2,19 @@ import time
 import uuid
 import logging
 import threading
+from datetime import datetime, timezone
 
 log = logging.getLogger("keep_alive")
+
+def timestamputc():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 def criar_ping():
     return {
         "type": "PING",
         "msg_id": str(uuid.uuid4()),
         "ttl": 1,
-        "timestamp": str(time.time()),
+        "timestamp": timestamputc(),
     }
 
 def criar_pong(timestamp_original):
@@ -26,6 +30,7 @@ class KeepAlive:
         self.ger_conex = ger_conex
         self.peer_table = peer_table
         self.intervalo = intervalo
+        self.ping_tempo = {}
 
         self.falhas = {}
         self.lock = threading.RLock()
@@ -67,6 +72,7 @@ class KeepAlive:
                     continue
                 self.falhas[peer_id] = erros+1
 
+            self.ping_tempo[peer_id] = time.time()
             self.ger_conex.enviar(peer_id, criar_ping())
             log.debug(f"[KeepAlive] Ping para {peer_id} enviado (esperando pong {self.falhas[peer_id]})")
         return
@@ -83,9 +89,9 @@ class KeepAlive:
             with self.lock:
                 self.falhas[peer_id] = 0
             try:
-                ts = float(msg.get("timestamp"))
-                rtt_ms = (time.time()-ts)*1000
-                (self.peer_table.calc_rtt(peer_id, rtt_ms))
+                if peer_id in self.ping_tempo:
+                    rtt_ms = (time.time()-self.ping_tempo.pop(peer_id))*1000
+                    self.peer_table.calc_rtt(peer_id, rtt_ms)
             except Exception as e:
                 log.warning(f"[KeepAlive] Erro no RTT de {peer_id}: {e}")
 
