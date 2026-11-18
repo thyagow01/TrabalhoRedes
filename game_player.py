@@ -120,12 +120,13 @@ class GamePlayer:
                 game_id = jogos["game_id"]           #verifica a existência do game.id destino, da partida, tirando la do jogos_disponiveis()
 
             msg = self._criar_envelope("JOIN", host_peer_id, {"game_id": game_id})
-            if not self.ger_conex.enviar(host_peer_id, msg):
-                raise RuntimeError(f"Não foi possível enviar JOIN para {host_peer_id} (sem conexão ativa).")
-
             self._join_pendente_msg_id = msg["msg_id"]
             self.host_peer_id = host_peer_id
             self.game_id = game_id
+
+            if not self.ger_conex.enviar(host_peer_id, msg):
+                raise RuntimeError(f"Não foi possível enviar JOIN para {host_peer_id} (sem conexão ativa).")
+
             log.info(f"[Player] Solicitando entrada em {game_id}...")        #envia o join, sem alterar o tipo ainda(so com a msg do ok do host)
 
     def sair_jogo(self): #LEAVE, encerra a participação
