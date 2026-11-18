@@ -45,6 +45,7 @@ class p2pno:
 
         self.rodando =True
         self.thread_rdv = None
+        self.meu_ip = None
 
     def on_mensagem(self, peer_id, msg):
         if self.keepalive.tratar_msg(peer_id , msg):
@@ -84,9 +85,9 @@ class p2pno:
         try:
             resp = self.rdv.register(self.namespace, self.nome, self.porta, ttl=self.ttl)
             if resp:
-                meu_ip = resp.get("ip") if resp else None
+                self.meu_ip = resp.get("ip")
             else:
-                meu_ip = None
+                self.meu_ip = None
             peers = self.rdv.discover(self.namespace)
             desc = self.tabela.update_discover(peers)
             for peer_id in desc:
@@ -94,7 +95,8 @@ class p2pno:
 
             cand = self.tabela.get_peers()
             for peer_id, ip, porta in cand:
-                t =threading.Thread(target=self.geren.conect, args=(peer_id, ip, porta), daemon=True)
+                ip_destino = "127.0.0.1" if (self.meu_ip and ip == self.meu_ip) else ip
+                t = threading.Thread(target=self.geren.conect, args=(peer_id, ip_destino, porta), daemon=True)
                 t.start()
 
         except Exception as e:
@@ -190,7 +192,7 @@ if __name__ == "__main__":
                     info = no.tabela.obter_peer(p)
                     if not info: continue
                     rtt = f"{info['avg_rtt']:.1f}ms" if info.get("avg_rtt") is not None else "medindo"
-                    print(f"{p} ({info['ip']}:{info.get('porta')}) [{info.get('direcao')} Ping: {rtt}")
+                    print(f"{p} ({info['ip']}:{info.get('porta')}) [{info.get('direcao')}] Ping: {rtt}")
                 print()
 
             elif cmd == "/rtt":
@@ -281,7 +283,7 @@ if __name__ == "__main__":
                 elif no.player.esta_em_partida():
                     print(no.player.obter_status_texto())
                 else:
-                    print("[CLI} voce não está em nenhuma partida")
+                    print("[CLI] você não está em nenhuma partida")
 
             elif cmd == "/log":
                 if len(partes) >1:
