@@ -1,3 +1,8 @@
+######################################
+#Eduardo Kachel Pereira: 241009780   #
+#João Pedro Martins França: 241009815#
+#Thiago Rocha Gomes Urbano: 241040646#
+######################################
 import socket
 import threading
 import logging
@@ -108,7 +113,7 @@ class ger_conex:
             log.debug(f"<- {json.dumps(msg)}")
 
             if msg.get("type") != "HELLO":
-                log.warning(f"[Handshake IN] Esperava HELLO de {endereco}, mas veio {msg.get("type")}")
+                log.warning(f"[Handshake IN] Esperava HELLO de {endereco}, mas veio {msg.get('type')}")
                 cliente_sock.close()
                 return
 

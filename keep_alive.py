@@ -1,3 +1,8 @@
+######################################
+#Eduardo Kachel Pereira: 241009780   #
+#João Pedro Martins França: 241009815#
+#Thiago Rocha Gomes Urbano: 241040646#
+######################################
 import time
 import uuid
 import logging

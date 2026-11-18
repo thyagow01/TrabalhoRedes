@@ -1,10 +1,13 @@
+######################################
+#Eduardo Kachel Pereira: 241009780   #
+#João Pedro Martins França: 241009815#
+#Thiago Rocha Gomes Urbano: 241040646#
+######################################
 import time
 import threading
 import logging
-import uuid
 import sys
 import json
-from traceback import print_tb
 
 from rendezvous_connection import RendezvousConnection
 from peer_table import PeerTable
@@ -12,7 +15,6 @@ from peer_connection import ger_conex
 from keep_alive import KeepAlive
 from game_host import GameHost
 from game_player import GamePlayer
-import json_handler as jh
 
 log = logging.getLogger("main")
 
