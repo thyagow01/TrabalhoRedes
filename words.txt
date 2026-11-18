@@ -10,3 +10,7 @@ protocolo
 conexao
 internet
 universidade
+testes
+teclado
+geometria
+maquinario
