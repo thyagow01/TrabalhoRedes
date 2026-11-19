@@ -209,7 +209,7 @@ class JogoDaForca:
     def finalizado(self):
         return self.verificar_vitoria() or self.verificar_derrota()
 
-    def desenho_forca(self):
+    def desenho_forca(self):        #ajuste para variação da vidas(devido ao .config de outros jogos)
         erros = self.vidas_iniciais - self.vidas_restantes
         max_idx = len(self.ESTAGIOS_FORCA) - 1
         indice = min(max_idx, round((erros / self.vidas_iniciais) * max_idx))
