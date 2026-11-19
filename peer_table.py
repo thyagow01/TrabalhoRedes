@@ -46,7 +46,7 @@ class PeerTable:
             "motivo_gone": None,
         }
 
-    def update_discover(self, lista_peers):
+    def update_discover(self, lista_peers): #da update e discover na situação dos peers atuais e procuar outros
         peers_agora = set()
         desconectar_imd=[]
 
@@ -112,7 +112,7 @@ class PeerTable:
 
         return desconectar_imd
 
-    def get_peers(self):
+    def get_peers(self): #pega os candidatos para conexao
         cand = []
         agora = time.monotonic()
         with self.lock:
@@ -124,7 +124,7 @@ class PeerTable:
                         reg["prox_tentativa"] = agora + 15.0
         return cand
 
-    def resetar_tentativas(self):
+    def resetar_tentativas(self): #limpa tentativas de conexao
         with self.lock:
             for reg in self.peers.values():
                 if reg["status"] in (Stale, Gone):
@@ -135,7 +135,7 @@ class PeerTable:
                     reg["motivo_gone"] = None
             log.info("[PeerTable] Tentativas de reconexão resetadas")
 
-    def conectando(self, peer_id):
+    def conectando(self, peer_id): #muda o estado para conectando
         with self.lock:
             if peer_id in self.peers:
                 self.peers[peer_id]["status"] = Connecting
@@ -143,7 +143,7 @@ class PeerTable:
 
         return
 
-    def conectado(self, peer_id, direcao, features=None):
+    def conectado(self, peer_id, direcao, features=None): #muda atribus para o caso conectado
         with self.lock:
             if peer_id not in self.peers:
                 name, namespace = peer_id.split("@",1)
@@ -158,7 +158,7 @@ class PeerTable:
             log.info(f"[PeerTable] {peer_id} conectado {direcao}")
         return
 
-    def falha(self, peer_id, erro):
+    def falha(self, peer_id, erro): #registra falha e aumenta o contador
         with self.lock:
             if peer_id in self.peers:
                 reg = self.peers[peer_id]
@@ -175,7 +175,7 @@ class PeerTable:
                     log.debug(f"[PeerTable] {peer_id} vai esperar {espera} segundos para tentar novamente -> STALE")
         return
 
-    def desconectou(self, peer_id, motivo):
+    def desconectou(self, peer_id, motivo): #mudas atributos caso desconect
         with self.lock:
             if peer_id in self.peers:
                 reg = self.peers[peer_id]
@@ -187,7 +187,7 @@ class PeerTable:
                     log.info(f"[PeerTable] Conexão com {peer_id} perdida ({motivo}) -> STALE")
         return
 
-    def calc_rtt(self, peer_id, rtt_ms):
+    def calc_rtt(self, peer_id, rtt_ms): #calcula a media do retts
         with self.lock:
             if peer_id in self.peers:
                 reg = self.peers[peer_id]
@@ -197,13 +197,13 @@ class PeerTable:
 
         return
 
-    def obter_peer(self, peer_id):
+    def obter_peer(self, peer_id):#pega o dicionario do peer
         with self.lock:
             if peer_id in self.peers:
                 return dict(self.peers[peer_id])
             return None
 
-    def list_conect(self):
+    def list_conect(self):#lista os peers conectados
         conectados = []
         with self.lock:
             for peer_id, reg in self.peers.items():
@@ -211,7 +211,7 @@ class PeerTable:
                     conectados.append(peer_id)
         return conectados
 
-    def resumo(self):
+    def resumo(self): #fala qnts peers tem de cada tipo
         with self.lock:
             contagem = {Discovered: 0, Connecting: 0, Connected: 0, Stale: 0, Gone: 0}
             for reg in self.peers.values():

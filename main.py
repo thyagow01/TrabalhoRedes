@@ -49,7 +49,7 @@ class p2pno:
         self.thread_rdv = None
         self.meu_ip = None
 
-    def on_mensagem(self, peer_id, msg):
+    def on_mensagem(self, peer_id, msg): #analisa a mensagem e manda pra funçao tratar
         if self.keepalive.tratar_msg(peer_id , msg):
             return
 
@@ -65,7 +65,7 @@ class p2pno:
 
         log.debug(f"[Node] Mensagem não tratada de {peer_id}: {msg}")
 
-    def on_desconexao(self, peer_id):
+    def on_desconexao(self, peer_id): #ve quem desconectou e manda para funçaõ de desconexao
         if hasattr(self, "player") and self.player:
             self.player.on_peer_desconectado(peer_id)
         if hasattr(self, "host") and self.host:
@@ -73,7 +73,7 @@ class p2pno:
         log.debug(f"[Node] Erro na desconexão: {peer_id}")
         return
 
-    def init(self):
+    def init(self): #da init em tudo e roda as partes dos outros .py
         self.rodando = True
         self.geren.init_serv()
         self.exec_ciclo_rdv()
@@ -83,7 +83,7 @@ class p2pno:
         log.info(f"[Node] {self.meu_peer_id} iniciado na porta {self.porta}")
         return
 
-    def exec_ciclo_rdv(self):
+    def exec_ciclo_rdv(self):#executa o ciclho de conexao do rdv desconecta quem pediu pra sair do rdv e conecta quem chegou
         try:
             resp = self.rdv.register(self.namespace, self.nome, self.porta, ttl=self.ttl)
             if resp:
@@ -106,7 +106,7 @@ class p2pno:
 
         return
 
-    def loop_rdv(self):
+    def loop_rdv(self): #fic rodando o ciclo do rdv
         while self.rodando:
             for i in range(self.discover_interval):
                 if not self.rodando:
@@ -115,7 +115,7 @@ class p2pno:
             self.exec_ciclo_rdv()
         return
 
-    def parar(self):
+    def parar(self): #para e encerra o no, mata o jogo ou sai do jogo
         self.rodando = False
         log.info(f"[Node] encerrando nó")
 
@@ -141,7 +141,7 @@ if __name__ == "__main__":
     cfg={}
     try:
         with open("config.json", "r", encoding="utf-8") as f:
-            cfg = json.load(f)
+            cfg = json.load(f) #carrega as configs
     except:
         pass
 
@@ -155,11 +155,11 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", handlers=lh)
 
-    if len(sys.argv) >= 4:
+    if len(sys.argv) >= 4: #se passar argumentos no .py do terminal ja joga
         nome = sys.argv[1]
         namespace = sys.argv[2]
         porta = int(sys.argv[3])
-    else:
+    else: #se nao pega do config se nao colocar nada no input
         nome_def = cfg.get("name")
         ns_def = cfg.get("namespace")
         porta_def = cfg.get("listen_port")
@@ -169,7 +169,7 @@ if __name__ == "__main__":
         porta = str(input(f"Porta[{porta_def}]: ").strip())
         porta = int(porta) if porta else porta_def
 
-    no = p2pno(nome,namespace,porta,config=cfg)
+    no = p2pno(nome,namespace,porta,config=cfg) #roda o no p2p
     no.init()
 
     print("Nó na rede, /help para comandos")
@@ -183,11 +183,11 @@ if __name__ == "__main__":
             partes = linha.split()
             cmd = partes[0].lower()
 
-            if cmd == "/peers":
+            if cmd == "/peers": #imprime os peers no rdv
                 peers = no.rdv.discover(no.namespace)
                 print(f"[CLI] peers no rendezvous {len(peers)} : {[p['name'] for p in peers]}")
 
-            elif cmd in ("/conn", "/status_rede"):
+            elif cmd in ("/conn", "/status_rede"): #devolve os stauts das conexoes
                 conectados = no.tabela.list_conect()
                 print(f"[CLI] conexoes ativas {len(conectados)} :")
                 for p in conectados:
@@ -197,17 +197,17 @@ if __name__ == "__main__":
                     print(f"{p} ({info['ip']}:{info.get('porta')}) [{info.get('direcao')}] Ping: {rtt}")
                 print()
 
-            elif cmd == "/rtt":
+            elif cmd == "/rtt": #devove o rtt medio
                 for p in no.tabela.list_conect():
                     info = no.tabela.obter_peer(p)
                     print(f"{p}: RTT medio = {info.get('avg_rtt')}ms")
 
-            elif cmd == "/reconnect":
+            elif cmd == "/reconnect": #tenta dar reconect forçado
                 no.tabela.resetar_tentativas()
                 no.exec_ciclo_rdv()
                 print("[CLI] Reconect forçado")
 
-            elif cmd == "/create":
+            elif cmd == "/create": #cria o jogo
                 palavra = partes[1] if len(partes) > 1 else None
                 max_p = int(partes[2]) if len(partes) > 2 else None
                 try:
@@ -220,14 +220,14 @@ if __name__ == "__main__":
                 except Exception as e:
                     print(f"Erro ao criar partida: {e}")
 
-            elif cmd == "/start":
+            elif cmd == "/start": #inicia o jogo (host)
                 try:
                     no.host.iniciar_partida()
                     print("[CLI] Partida iniciada")
                 except Exception as e:
                     print(f"Erro ao iniciar partida: {e}")
 
-            elif cmd == "/cancel":
+            elif cmd == "/cancel": #cancela o jogo como host
                 try:
                     ok = no.host.cancelar_partida()
                     if ok:
@@ -237,14 +237,14 @@ if __name__ == "__main__":
                 except Exception as e:
                     print(f"Erro ao cancelar partida: {e}")
 
-            elif cmd == "/games":
+            elif cmd == "/games": #mostra os jogos disponives
                 try:
                     print("[CLI] Partidas disponiveis:")
                     no.player.listar_jogos()
                 except Exception as e:
                     print(f"Erro ao listar jogos: {e}")
 
-            elif cmd == "/join":
+            elif cmd == "/join": #pede para entrar no jogo
                 if len(partes) >1:
                     try:
                         no.player.entrar_jogo(partes[1])
@@ -254,14 +254,14 @@ if __name__ == "__main__":
                 else:
                     print("[CLI] para entrar digite /join <host_id>")
 
-            elif cmd == "/leave":
+            elif cmd == "/leave": #pede pra sair do jogo
                 try:
                     no.player.sair_jogo()
                     print(f"[CLI] saiu do jogo")
                 except Exception as e:
                     print(f"Erro ao sair: {e}")
 
-            elif cmd == "/guess":
+            elif cmd == "/guess": #chuta letra
                 if len(partes) >1:
                     try:
                         no.player.enviar_palpite_letra(partes[1])
@@ -270,7 +270,7 @@ if __name__ == "__main__":
                 else:
                     print("[CLI] para enviar digite /guess <letra>")
 
-            elif cmd == "/word":
+            elif cmd == "/word": #chuta palavra
                 if len(partes) >1:
                     try:
                         no.player.enviar_palpite_palavra(partes[1])
@@ -279,7 +279,7 @@ if __name__ == "__main__":
                 else:
                     print("[CLI] para enviar digite /word <palavra>")
 
-            elif cmd == "/status":
+            elif cmd == "/status": #status da partida
                 if no.host.tem_partida_ativa():
                     print(no.host.obter_status_texto())
                 elif no.player.esta_em_partida():
@@ -287,7 +287,7 @@ if __name__ == "__main__":
                 else:
                     print("[CLI] você não está em nenhuma partida")
 
-            elif cmd == "/log":
+            elif cmd == "/log": #muda o tipo de log que ta pegando
                 if len(partes) >1:
                     nivel = getattr(logging, partes[1].upper(), logging.INFO)
                     logging.getLogger().setLevel(nivel)
@@ -295,7 +295,7 @@ if __name__ == "__main__":
                 else:
                     print("[CLI] Selecione o nivel de log /log <DEBUG|INFO|WARNING|ERROR>")
 
-            elif cmd == "/help":
+            elif cmd == "/help": #help né, ajuda
                     print("Comandos:")
                     print("/games -> lista partidas")
                     print("/create <palavra> [max_players] ->cria partida")

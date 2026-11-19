@@ -22,7 +22,7 @@ def env_msg(sock, dado):
 def hello(meu_peer_id, features=None):
     if features is None:
         features = ["hangman"]
-    return {
+    return { #mensagem de hello para estabelecer a conexao
         "type": "HELLO",
         "msg_id": str(uuid.uuid4()),
         "ttl": 1,
@@ -34,7 +34,7 @@ def hello(meu_peer_id, features=None):
 def hello_ok(meu_peer_id, features=None):
     if features is None:
         features = ["hangman"]
-    return {
+    return { #hello_ok confirma o recebimento
             "type": "HELLO_OK",
             "msg_id": str(uuid.uuid4()),
             "ttl": 1,
@@ -44,7 +44,7 @@ def hello_ok(meu_peer_id, features=None):
         }
 
 def bye(meu_peer_id, dest, motivo="closing"):
-    return {
+    return { #msg para fechar conexao
         "type": "BYE",
         "msg_id": str(uuid.uuid4()),
         "ttl": 1,
@@ -53,7 +53,7 @@ def bye(meu_peer_id, dest, motivo="closing"):
         "reason": motivo
     }
 def bye_ok(meu_peer_id, dest):
-    return {
+    return { #confirmação do fechamento
         "type": "BYE_OK",
         "msg_id": str(uuid.uuid4()),
         "ttl": 1,
@@ -61,7 +61,7 @@ def bye_ok(meu_peer_id, dest):
         "dst": dest
     }
 
-class ger_conex:
+class ger_conex: #gerenciamento da conexao dos peers
     def __init__(self, meu_peer_id, peer_table, porta, on_mensagem=None, on_desconexao=None):
         self.meu_peer_id = meu_peer_id
         self.peer_table = peer_table
@@ -75,7 +75,7 @@ class ger_conex:
         self.serv_sock = None
         self.rodando = True
 
-    def init_serv(self):
+    def init_serv(self): #inicializaçao do socket e serv
         self.serv_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.serv_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.serv_sock.bind(("0.0.0.0", self.porta))
@@ -86,7 +86,7 @@ class ger_conex:
         escuta.start()
         return
 
-    def loop_escuta(self):
+    def loop_escuta(self): #fica ouvindo e avisa qnd recerber conex
         while self.rodando:
             try:
                 cliente_sock, endereco = self.serv_sock.accept()
@@ -100,7 +100,7 @@ class ger_conex:
                 break
         return
 
-    def handshakein(self, cliente_sock, endereco):
+    def handshakein(self, cliente_sock, endereco): #processo de handshake
         arquivo = None
         try:
             cliente_sock.settimeout(5.0)
@@ -114,14 +114,14 @@ class ger_conex:
 
             if msg.get("type") != "HELLO":
                 log.warning(f"[Handshake IN] Esperava HELLO de {endereco}, mas veio {msg.get('type')}")
-                cliente_sock.close()
+                cliente_sock.close() #recebeu relou errado encerra tentativa de conex
                 return
 
             peer_id = msg.get("peer_id")
             features = msg.get("features", [])
 
             with self.lock:
-                if peer_id in self.conexoes:
+                if peer_id in self.conexoes:#ve se ja n ta conectado
                     log.info(f"[Handshake IN] Conexao duplicada com {peer_id}")
                     if self.meu_peer_id <peer_id:
                         env_msg(cliente_sock, bye(self.meu_peer_id, peer_id, motivo="duplicate"))
@@ -155,7 +155,7 @@ class ger_conex:
             except:
                 pass
 
-    def loop_leitura(self, sock, arquivo, peer_id):
+    def loop_leitura(self, sock, arquivo, peer_id): #fica ouvindo as msgs
         try:
             while self.rodando:
                 try:
@@ -167,12 +167,12 @@ class ger_conex:
                     if msg.get("type") == "BYE":
                         log.info(f"[Conexao] {peer_id} enviou BYE (motivo: {msg.get('reason')})")
                         try:
-                            env_msg(sock, bye_ok(self.meu_peer_id, peer_id))
+                            env_msg(sock, bye_ok(self.meu_peer_id, peer_id))#se recebeu bye manda bye ok de volta
                         except:
                             pass
                         break
                     if self.on_mensagem:
-                        self.on_mensagem(peer_id, msg)
+                        self.on_mensagem(peer_id, msg)#trata a msg
 
                 except jh.MensagemDescartada:
                     continue
@@ -209,7 +209,7 @@ class ger_conex:
                         log.error(f"[Conexao] Erro no callback on_desconexao: {e}")
         return
 
-    def conect(self, peer_id, ip, porta):
+    def conect(self, peer_id, ip, porta): #ve se recebeu hello ok e conecta
         self.peer_table.conectando(peer_id)
         sock = None
         try:
@@ -252,7 +252,7 @@ class ger_conex:
 
         return
 
-    def enviar(self, peer_id, dado):
+    def enviar(self, peer_id, dado): #envia msg
         with self.lock:
             sock = self.conexoes.get(peer_id)
 
@@ -267,7 +267,7 @@ class ger_conex:
             log.warning(f"[Conexao] Erro ao enviar mensagem para {peer_id}: {e}")
             return False
 
-    def broadcast(self, dado):
+    def broadcast(self, dado): #envia msg para todos os peers
         with self.lock:
             todos = list(self.conexoes.keys())
 
@@ -276,7 +276,7 @@ class ger_conex:
 
         return
 
-    def desconectar(self, peer_id, motivo = "closing"):
+    def desconectar(self, peer_id, motivo = "closing"): #desconecta dos peers
         with self.lock:
             sock = self.conexoes.pop(peer_id, None)
 
@@ -299,7 +299,7 @@ class ger_conex:
 
         return
 
-    def parar(self):
+    def parar(self):#para o socket/serv
         self.rodando = False
         with self.lock:
             peers = list(self.conexoes.keys())
