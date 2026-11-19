@@ -243,7 +243,7 @@ class GameHost:
 
         with self.lock:
             id_valido = (req_game_id == self.game_id or req_game_id in (self.meu_peer_id, f"{self.meu_peer_id}/default",""))
-            if self.estado == IDLE or req_game_id != self.game_id:  #nem tem jogo
+            if self.estado == IDLE or not id_valido:  #nem tem jogo
                 self._enviar_join_error(peer_id, req_game_id, "unknown_game", ref_id)    
                 return
 
