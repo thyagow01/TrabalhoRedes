@@ -31,12 +31,12 @@ def hello(meu_peer_id, features=None):
         "features": features
     }
 
-def hello_ok(meu_peer_id, features=None):
+def hello_ok(meu_peer_id, features=None, msg_id=None):
     if features is None:
         features = ["hangman"]
     return { #hello_ok confirma o recebimento
             "type": "HELLO_OK",
-            "msg_id": str(uuid.uuid4()),
+            "msg_id": msg_id if msg_id else str(uuid.uuid4()),
             "ttl": 1,
             "peer_id": meu_peer_id,
             "version": "1.0",
@@ -52,10 +52,10 @@ def bye(meu_peer_id, dest, motivo="closing"):
         "dst": dest,
         "reason": motivo
     }
-def bye_ok(meu_peer_id, dest):
+def bye_ok(meu_peer_id, dest, msg_id=None):
     return { #confirmação do fechamento
         "type": "BYE_OK",
-        "msg_id": str(uuid.uuid4()),
+        "msg_id": msg_id if msg_id else str(uuid.uuid4()),
         "ttl": 1,
         "src": meu_peer_id,
         "dst": dest
@@ -70,10 +70,20 @@ class ger_conex: #gerenciamento da conexao dos peers
         self.on_desconexao = on_desconexao
 
         self.conexoes ={}
+        self.send_locks = {}
         self.lock = threading.RLock()
 
         self.serv_sock = None
         self.rodando = True
+
+    def _enviar_sock(self, sock, dado):
+        with self.lock:
+            send_lock = self.send_locks.get(sock)
+        if send_lock:
+            with send_lock:
+                env_msg(sock, dado)
+        else:
+            env_msg(sock, dado)
 
     def init_serv(self): #inicializaçao do socket e serv
         self.serv_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -135,13 +145,14 @@ class ger_conex: #gerenciamento da conexao dos peers
                             except:
                                 pass
 
-            resp = hello_ok(self.meu_peer_id)
+            resp = hello_ok(self.meu_peer_id, msg_id=msg.get("msg_id"))
             env_msg(cliente_sock, resp)
 
             cliente_sock.settimeout(None)
 
             with self.lock:
                 self.conexoes[peer_id] = cliente_sock
+                self.send_locks[cliente_sock] = threading.Lock()
 
             self.peer_table.conectado(peer_id, direcao= "INBOUND", features=features)
             log.info(f"[Handshake IN] Conectado com sucesso com {peer_id}")
@@ -164,10 +175,11 @@ class ger_conex: #gerenciamento da conexao dos peers
                         log.info(f"[Conexao] {peer_id} fechou a conexao")
                         break
                     log.debug(f"<- {json.dumps(msg)}")
+                    jh.validar_destinatario(msg, self.meu_peer_id)
                     if msg.get("type") == "BYE":
                         log.info(f"[Conexao] {peer_id} enviou BYE (motivo: {msg.get('reason')})")
                         try:
-                            env_msg(sock, bye_ok(self.meu_peer_id, peer_id))#se recebeu bye manda bye ok de volta
+                            self._enviar_sock(sock, bye_ok(self.meu_peer_id, peer_id, msg_id=msg.get("msg_id")))#se recebeu bye manda bye ok de volta
                         except:
                             pass
                         break
@@ -181,7 +193,7 @@ class ger_conex: #gerenciamento da conexao dos peers
                     log.warning(f"[Conexao] Mensagem invalida de {peer_id}: {e}")
                     if e.responder:
                         msg_erro = jh.criar_mensagem_erro(self.meu_peer_id, peer_id, e.code, e.message, e.ref_msg_id)
-                        env_msg(sock, msg_erro)
+                        self._enviar_sock(sock, msg_erro)
 
         except Exception as e:
             log.warning(f"[Conexao] Erro na conexao com {peer_id}: {e}")
@@ -193,6 +205,7 @@ class ger_conex: #gerenciamento da conexao dos peers
                     era_ativa = True
                 else:
                     era_ativa = False
+                self.send_locks.pop(sock, None)
 
             try:
                 sock.close()
@@ -229,6 +242,7 @@ class ger_conex: #gerenciamento da conexao dos peers
 
             with self.lock:
                 self.conexoes[peer_id] = sock
+                self.send_locks[sock] = threading.Lock()
 
             self.peer_table.conectado(peer_id, direcao= "OUTBOUND", features=resp.get("features", []))
             log.info(f"[Handshake OUT] Conectado com {peer_id}")
@@ -255,13 +269,18 @@ class ger_conex: #gerenciamento da conexao dos peers
     def enviar(self, peer_id, dado): #envia msg
         with self.lock:
             sock = self.conexoes.get(peer_id)
+            send_lock = self.send_locks.get(sock) if sock else None
 
         if not sock:
             log.warning(f"[Conexao] Nao tem conexao ativa com {peer_id}")
             return False
 
         try:
-            env_msg(sock, dado)
+            if send_lock:
+                with send_lock:
+                    env_msg(sock, dado)
+            else:
+                env_msg(sock, dado)
             return True
         except Exception as e:
             log.warning(f"[Conexao] Erro ao enviar mensagem para {peer_id}: {e}")
@@ -279,10 +298,15 @@ class ger_conex: #gerenciamento da conexao dos peers
     def desconectar(self, peer_id, motivo = "closing"): #desconecta dos peers
         with self.lock:
             sock = self.conexoes.pop(peer_id, None)
+            send_lock = self.send_locks.get(sock) if sock else None
 
         if sock:
             try:
-                env_msg(sock, bye(self.meu_peer_id, peer_id, motivo=motivo))
+                if send_lock:
+                    with send_lock:
+                        env_msg(sock, bye(self.meu_peer_id, peer_id, motivo=motivo))
+                else:
+                    env_msg(sock, bye(self.meu_peer_id, peer_id, motivo=motivo))
             except:
                 pass
             try:

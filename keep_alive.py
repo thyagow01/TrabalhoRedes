@@ -22,19 +22,20 @@ def criar_ping():
         "timestamp": timestamputc(),
     }
 
-def criar_pong(timestamp_original):
+def criar_pong(timestamp_original, msg_id=None):
     return { #cria resposta do ping
         "type": "PONG",
-        "msg_id": str(uuid.uuid4()),
+        "msg_id": msg_id if msg_id else str(uuid.uuid4()),
         "ttl": 1,
         "timestamp": str(timestamp_original),
     }
 
 class KeepAlive:
-    def __init__(self, ger_conex, peer_table, intervalo=30):
+    def __init__(self, ger_conex, peer_table, intervalo=30, miss_limit=3):
         self.ger_conex = ger_conex
         self.peer_table = peer_table
-        self.intervalo = intervalo
+        self.intervalo = int(intervalo)
+        self.miss_limit = int(miss_limit)
         self.ping_tempo = {}
 
         self.falhas = {}
@@ -67,19 +68,33 @@ class KeepAlive:
         conect = self.peer_table.list_conect() #pega a lista dos peers conectados
 
         for peer_id in conect: #passa por todos mandando ping
+            desconectar_peer = False
+            ping_msg = criar_ping()
             with self.lock:
                 erros = self.falhas.get(peer_id, 0) #ve se tem falha
 
-                if erros >= 3: #se tiver 3 ou mais deu timeout e desconecta e gone
-                    log.warning(f"[KeepAlive] {peer_id} Perdeu 3 pings seguidos -> Desconctando")
+                if erros >= self.miss_limit: #se atingiu o limite deu timeout e desconecta
                     self.falhas.pop(peer_id, None)
-                    self.ger_conex.desconectar(peer_id, motivo="Timeout de 3 pings")
-                    continue
-                self.falhas[peer_id] = erros+1
+                    self.ping_tempo.pop(peer_id, None)
+                    desconectar_peer = True
+                else:
+                    self.falhas[peer_id] = erros + 1
+                    agora = time.time()
+                    pendentes = self.ping_tempo.setdefault(peer_id, {})
+                    pendentes[ping_msg["msg_id"]] = agora
+                    pendentes["_ultimo"] = agora
+                    if len(pendentes) > 10:
+                        mais_antigo = next(k for k in pendentes if k != "_ultimo")
+                        pendentes.pop(mais_antigo, None)
+                    tentativa_atual = self.falhas[peer_id]
 
-            self.ping_tempo[peer_id] = time.time() #pega a hora pra calcular o rtt dps
-            self.ger_conex.enviar(peer_id, criar_ping())
-            log.debug(f"[KeepAlive] Ping para {peer_id} enviado (esperando pong {self.falhas[peer_id]})")
+            if desconectar_peer:
+                log.warning(f"[KeepAlive] {peer_id} Perdeu {self.miss_limit} pings seguidos -> Desconectando")
+                self.ger_conex.desconectar(peer_id, motivo=f"Timeout de {self.miss_limit} pings")
+                continue
+
+            self.ger_conex.enviar(peer_id, ping_msg)
+            log.debug(f"[KeepAlive] Ping para {peer_id} enviado (esperando pong {tentativa_atual})")
         return
 
     def tratar_msg(self, peer_id, msg):
@@ -87,15 +102,26 @@ class KeepAlive:
 
         if tipo == "PING": #ve se é ping se for manda pong
             ts = msg.get("timestamp")
-            self.ger_conex.enviar(peer_id, criar_pong(ts))
+            mid = msg.get("msg_id")
+            self.ger_conex.enviar(peer_id, criar_pong(ts, msg_id=mid))
             log.debug(f"[KeepAlive] Pong respondido para {peer_id}")
             return True
         elif tipo == "PONG": #ve se é pong calcula o rtt
+            mid = msg.get("msg_id")
+            t_envio = None
             with self.lock:
                 self.falhas[peer_id] = 0
+                pendentes = self.ping_tempo.get(peer_id)
+                if pendentes:
+                    t_envio = pendentes.pop(mid, None)
+                    if t_envio is not None:
+                        if pendentes.get("_ultimo") == t_envio:
+                            pendentes.pop("_ultimo", None)
+                    else:
+                        t_envio = pendentes.pop("_ultimo", None)
             try:
-                if peer_id in self.ping_tempo:
-                    rtt_ms = (time.time()-self.ping_tempo.pop(peer_id))*1000 #pega o tempo e dps faz vira ms
+                if t_envio is not None:
+                    rtt_ms = (time.time() - t_envio) * 1000 #pega o tempo e dps faz vira ms
                     self.peer_table.calc_rtt(peer_id, rtt_ms)
             except Exception as e:
                 log.warning(f"[KeepAlive] Erro no RTT de {peer_id}: {e}")

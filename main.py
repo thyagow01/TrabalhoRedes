@@ -31,8 +31,9 @@ class p2pno:
         rdv_p = int(self.config.get("rdv_port", rdv_porta))
         self.ttl = int(self.config.get("register_ttl", 7200))
         self.discover_interval = int(self.config.get("discover_interval", 20))
-        ping_intevalo = int(self.config.get("ping_intevalo", 30))
-        turno_timeout = int(self.config.get("turno_timeout", 30))
+        ping_intervalo = int(self.config.get("ping_interval", 30))
+        ping_miss_limit = int(self.config.get("ping_miss_limit", 3))
+        turno_timeout = int(self.config.get("turn_timeout", 30))
         aqv_palavras = self.config.get("words_file", "words.txt")
         vidas = int(self.config.get("lives", 6))
         max_players = int(self.config.get("max_players", 4))
@@ -40,7 +41,7 @@ class p2pno:
         self.rdv = RendezvousConnection(rdv_host, rdv_p) #faz a conexão no servido porta do rdv
         self.tabela = PeerTable(self.meu_peer_id, base_backoff=int(self.config.get("base_backoff", 2)), max_backoff=int(self.config.get("max_backoff", 60)), max_tries=int(self.config.get("max_reconnect_attempts", 5))) #cria a tabela de peers e conecta com eles com o tempo de envio exponencial e maximo de tentativas
         self.geren = ger_conex(self.meu_peer_id, self.tabela, self.porta, on_mensagem=self.on_mensagem, on_desconexao=self.on_desconexao) # cria o gerenciador de conexões para enviar msgs de hello hello ok e bye e bye ok
-        self.keepalive = KeepAlive(self.geren, self.tabela, intervalo=ping_intevalo) #fica mandando ping pong para ver se ta vivo
+        self.keepalive = KeepAlive(self.geren, self.tabela, intervalo=ping_intervalo, miss_limit=ping_miss_limit) #fica mandando ping pong para ver se ta vivo
 
         self.host = GameHost(meu_peer_id=self.meu_peer_id, ger_conex=self.geren, vidas_padrao= vidas, max_players_padrao= max_players, turn_timeout= turno_timeout, arquivo_palavras= aqv_palavras, esta_jogando=lambda:self.player.esta_em_partida())
         self.player = GamePlayer(meu_peer_id=self.meu_peer_id, ger_conex= self.geren, peer_table= self.tabela,tem_jogo_host_fn=lambda: self.host.tem_partida_ativa())
