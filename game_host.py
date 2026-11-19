@@ -1,3 +1,8 @@
+######################################
+#Eduardo Kachel Pereira: 241009780   #
+#João Pedro Martins França: 241009815#
+#Thiago Rocha Gomes Urbano: 241040646#
+######################################
 import logging
 import threading
 import time
@@ -59,7 +64,7 @@ class GameHost:
             else:
                 return False
  
-    def _criar_envelope(self, tipo, dst, campos_extras=None, ref_msg_id=None):         #cabecalho base + campos extras(opcional)
+    def _criar_envelope(self, tipo, dst, campos_extras=None, ref_msg_id=None):         #cabecalho base + campos extras(opcional) das mensagens
         msg = {
             "type": tipo,
             "msg_id": ref_msg_id if ref_msg_id else str(uuid.uuid4()),
