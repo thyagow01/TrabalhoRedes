@@ -112,8 +112,9 @@ def ler_mensagem(mensagem):
             "Tamanho máximo de linha excedido (32 KiB)",
             responder=False
         )
-
+        
     try:
+    # Converte bytes recebidos da rede em string UTF-8 e interpreta o JSON
         texto = mensagem.decode("utf-8")
         dados = json.loads(texto)
 
@@ -122,7 +123,8 @@ def ler_mensagem(mensagem):
 
     except json.JSONDecodeError:
         raise ErroMensagem("bad_json", "JSON inválido")
-
+        
+    # Rejeita JSONs válidos na sintaxe mas inválidos no protocolo
     if not isinstance(dados, dict):
         raise ErroMensagem(
             "bad_request",
@@ -173,7 +175,8 @@ def validar_mensagem(dados):
         verificar_tipo(dados, "peer_id", str)
         verificar_tipo(dados, "version", str)
         verificar_tipo(dados, "features", list)
-
+        
+# Garante que todas as capacidades anunciadas na lista 'features' sejam strings
         for feature in dados["features"]:
             if not isinstance(feature, str):
                 gerar_erro(
@@ -183,20 +186,23 @@ def validar_mensagem(dados):
                 )
 
     elif tipo == "BYE":
+    # Motivo do encerramento da conexão
         verificar_tipo(dados, "reason", str)
-
+        
     elif tipo == "ERROR":
 
         verificar_tipo(dados, "code", str)
         verificar_tipo(dados, "message", str)
-
+        
+# Garante que o código de erro recebido pertence à tabela oficial do protocolo
         if dados["code"] not in CODIGOS_ERRO:
             gerar_erro(
                 dados,
                 "bad_request",
                 "Código de erro desconhecido"
             )
-
+            
+# Campo opcional que aponta para o msg_id da requisição que gerou o erro
         if "ref_msg_id" in dados:
             verificar_tipo(dados, "ref_msg_id", str)
 
@@ -232,7 +238,7 @@ def criar_mensagem_erro(src, dst, code, message, ref_msg_id=None):
         "code": code,
         "message": message
     }
-
+# Anexa o ID da mensagem original apenas se ele tiver sido fornecido
     if ref_msg_id is not None:
         erro["ref_msg_id"] = ref_msg_id
 
